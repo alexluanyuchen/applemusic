@@ -1,0 +1,144 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apple Music Search</title>
+</head>
+<body>
+
+<h1>🍎 Apple Music 搜索器</h1>
+
+<input id="keyword" placeholder="输入歌曲名或歌手">
+<button onclick="searchMusic()">搜索</button>
+
+<p id="status">请输入歌曲名称</p>
+<div id="results"></div>
+
+<script>
+let currentCallback = null;
+let currentScript = null;
+let requestTimer = null;
+
+function searchMusic() {
+    const keyword = document.getElementById("keyword").value.trim();
+    const status = document.getElementById("status");
+    const results = document.getElementById("results");
+
+    if (!keyword) {
+        status.textContent = "请输入搜索关键词";
+        return;
+    }
+
+    if (currentScript) currentScript.remove();
+    if (currentCallback) delete window[currentCallback];
+    clearTimeout(requestTimer);
+
+    results.replaceChildren();
+    status.textContent = "正在连接 Apple 音乐目录...";
+
+    const callbackName = "appleMusicResult_" + Date.now();
+    currentCallback = callbackName;
+
+    const params = new URLSearchParams({
+        term: keyword,
+        country: "sg",
+        media: "music",
+        entity: "song",
+        limit: "30",
+        callback: callbackName
+    });
+
+    window[callbackName] = function(data) {
+        clearTimeout(requestTimer);
+
+        if (currentScript) currentScript.remove();
+        delete window[callbackName];
+
+        currentScript = null;
+        currentCallback = null;
+
+        if (!data || !Array.isArray(data.results)) {
+            status.textContent = "返回数据格式错误";
+            return;
+        }
+
+        if (data.results.length === 0) {
+            status.textContent = "没有找到歌曲";
+            return;
+        }
+
+        status.textContent = "找到 " + data.results.length + " 首歌曲";
+
+        data.results.forEach(song => {
+            const item = document.createElement("div");
+
+            const cover = document.createElement("img");
+            cover.src = song.artworkUrl100 || "";
+            cover.alt = "专辑封面";
+            cover.width = 100;
+
+            const name = document.createElement("h3");
+            name.textContent = song.trackName || "未知歌曲";
+
+            const artist = document.createElement("p");
+            artist.textContent = "歌手：" + (song.artistName || "未知");
+
+            const album = document.createElement("p");
+            album.textContent = "专辑：" + (song.collectionName || "未知");
+
+            const appleLink = document.createElement("a");
+            appleLink.href = song.trackViewUrl || song.collectionViewUrl || "#";
+            appleLink.target = "_blank";
+            appleLink.rel = "noopener";
+            appleLink.textContent = "在 Apple Music 查看";
+
+            item.append(cover, name, artist, album, appleLink);
+
+            if (song.previewUrl) {
+                const audio = document.createElement("audio");
+                audio.src = song.previewUrl;
+                audio.controls = true;
+                audio.preload = "none";
+                item.append(document.createElement("br"), audio);
+            }
+
+            item.append(document.createElement("hr"));
+            results.appendChild(item);
+        };
+    };
+
+    currentScript = document.createElement("script");
+    currentScript.src =
+        "https://itunes.apple.com/search?" + params.toString();
+
+    currentScript.onerror = function() {
+        clearTimeout(requestTimer);
+        status.textContent = "连接失败，请检查网络或稍后重试";
+        delete window[callbackName];
+        currentScript.remove();
+        currentScript = null;
+        currentCallback = null;
+    };
+
+    requestTimer = setTimeout(function() {
+        if (currentCallback === callbackName) {
+            status.textContent = "请求超时，请检查网络";
+            delete window[callbackName];
+            if (currentScript) currentScript.remove();
+            currentScript = null;
+            currentCallback = null;
+        }
+    }, 12000);
+
+    document.head.appendChild(currentScript);
+}
+
+document.getElementById("keyword").addEventListener("keydown", e => {
+    if (e.key === "Enter") searchMusic();
+});
+</script>
+
+</body>
+</html>
